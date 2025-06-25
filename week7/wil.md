@@ -97,6 +97,7 @@ SQLite에서 가장 오른쪽 노드가 가득 찬 상태로 삽입이 발생할
       - top-down의 경우 트리 구조를 일부 유지해야 함
 
 > **Immutable(불변) B-Tree**
+> 
 > 불변 B-Tree도 가변 B-Tree처럼 bottom-up으로 구성할 수 있음
 > - 한 번 구성되면 바뀌지 않음 -> 추후 변경을 위한 공간을 남겨두지 않아도 됨
 > - Occupancy ↑↑
