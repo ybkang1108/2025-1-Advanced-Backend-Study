@@ -1,0 +1,100 @@
+# Chapter 5. Transaction Processing and Recovery
+> buffer management, lock management, recovery
+
+## Transcation의 4가지 특성: ACID
+트랜잭션이란? DBMS에서 더 이상 나눌 수 없는 논리적 작업 단위   
+- Indivisible: 더 이상 나눌 수 없음, 트랜잭션이 일부만 실행된 상태로 남아서는 안 된다!
+
+트랜잭션은 다음의 네 가지 특성을 보장해야 함: `Atomicity`, `Consistency`, `Isolation`, `Durability`
+
+### Atomicity 원자성
+> 트랜잭션은 모두 실행하거나, 모두 실행하지 않아야 함, 트랜잭션의 일부만 반영되는 것은 절대로 안 됨   
+
+각 트랜잭션은 두 가지 중 하나의 상태로 종료됨:
+- `Commit`: 변경 사항을 확정하고 사용자에게 반영
+- `Abort (Rollback)`: 트랜잭션 수행 중 발생한 변경사항을 전부 되돌림
+    - 트랜잭션이 중단된 경우, retry 가능
+
+### Consistency 일관성
+> 트랜잭션 실행 전후에 항상 **논리적으로 유효한 상태**를 유지해야 함
+
+유효 상태란? 데이터베이스의 모든 `불변 조건(invariant)`이 유지된 상태
+- constraints(제약 조건)
+  - PK, FK, NOT NULL 등
+- referential integrity(참조 무결성)
+
+> `Atomicity`, `Isolation`, `Durability`는 **DB 시스템이 자동으로 보장**하므로 구현이 명확하지만   
+> `Consistency`는 **DB뿐만 아니라 사용자 로직에 의해서도 결정**되므로 해석과 책임이 모호하다
+
+### Isolation 고립성
+> 여러 트랜잭션이 동시에 실행되어도 서로 영향을 주지 않아야 함
+
+이상적으로는 각 트랜잭션이 마치 독립적으로 실행된 것처럼 보여야 하지만 완전한 고립성은 시스템이 느려질 수 있음
+- 락 ↑↑, 대기시간 ↑↑
+
+=> 따라서 DBMS는 고립성을 **완전한 고립**이 아닌 **조절 가능한 격리** 수준으로 구현
+- Isolation Level: 고립성의 구현 수준
+  - Read Uncommitted ----------------> Serializable (완전한 고립)
+
+> _변경 내용이 다른 트랜잭션에 보일 수도 있고, 보이지 않을 수도 있음_   
+= 트랜잭션 간 데이터 변경 visibility가 사용 중인 `동시성 제어 방식`과 `고립 수준`에 따라 달라진다
+
+- **주요 `Concurrency Control`에 따른 Visibility 차이**
+
+  | Concurrency Control | 설명 | visibility 특징 |
+  |---| --- |---------------|
+  | Lock-based (2PL 등)               |  읽기/쓰기 전 락을 걸고 트랜잭션이 끝날 때까지 해제하지 않음 | 다른 트랜잭션은 락된 데이터에 접근 불가하므로 보이지 않음 |
+  | Timestamp ordering               | 각 트랜잭션에 타임스탬프를 부여해 순서 강제 | 논리적 순서 보장, 하지만 중간 결과는 보이지 않음 |
+  | Multi-Version Concurrency Control | 데이터의 여러 버전을 동시에 유지 | Read 트랜잭션은 다른 트랜잭션의 최신 변경 내용을 볼 수 있거나 볼 수 없게 설정 가능 |
+
+- **주요 `Isolation Level`에 따른 Visibility 차이**
+
+  | Isolation Level                    | 미완료 변경사항을 볼 수 있는가? | 특징                               | 허용되는 이상현상                                |
+  |------------------------------------| --- |----------------------------------|------------------------------------------|
+  | Read Uncommitted<br/>(가장 낮은 level) | O | Dirty Read 허용<br/>(commit되지 않은 값도 읽음) | dirty read, non-repeatable read, phantom |
+  | Read Committed                     | X | Commit된 데이터만 읽음                  | non-repeatable read, phantom             |
+  | Repeatable Read                    | X | 트랜잭션 중 같은 데이터를 반복 조회해도 결과는 동일함   | phantom                                  |
+  | Serializable<br/>(가장 높은 level)     | X | 트랜잭션 간 완전한 직렬 실행과 같은 결과          | X                                        |
+  - Dirty Read: 커밋되지 않은 값도 읽음
+  - Non-repeatable Read: 같은 행을 두 번 읽었는데 값이 다름
+  - Phantom Read: 같은 조건의 `SELECT` 쿼리를 트랜잭션 안에서 두 번 실행했는데, 두 번째에 새로운 행이 나타나는 현상
+    - 트랜잭션이 기존의 레코드에 대해서는 락을 걸지만 조건에 해당하는 잠재적인 행의 범위 전체에 대해 락을 걸지 않으므로 발생
+    - 트랜잭션 중간에 조건을 만족하는 새로운 행이 추가되거나 삭제되면 트랜잭션 중간에 `SELECT` 결과가 바뀜
+
+### Durability 지속성
+> 트랜잭션이 커밋된 후에는 그 결과가 어떤 상황에서도 지워지지 않아야 함
+
+커밋된 트랜잭션의 결과는 장애나 전원 오류 등 어떠한 상황에서도 데이터가 날아가서는 안 됨   
+-> DB는 `Write-Ahead Logging (WAL)`에 기록함으로써 이를 보장 (장애가 발생하더라도 로그를 기반으로 복원할 수 있음)
+
+---
+<br/><br/>
+트랜잭션을 구현하기 위해서는 기본적으로 storage structure이 필요하고, 트랜잭션을 제대로 다루기 위해서는 더 많은 요소가 필요  
+
+- Transaction Manager    
+  트랜잭션의 전체 흐름을 조율하고, 실행 단계를 관리하고 추적한다
+  - `조정(coordination)`: 여러 연산이 하나의 트랜잭션으로 동작하도록 설정  
+  - `스케줄링(scheduling)`: 동시에 실행되는 여러 트랜잭션 간의 실행 순서 제어
+  - `추적(tracking)`: 각 트랜잭션이 어디까지 수행되었는지 상태 관리
+<br/><br/>
+- Lock Manager   
+  데이터 접근 시 다른 트랜잭션과 충돌이 발생하지 않도록 락을 부여하거나 거절하여 `Data Integrity`를 보장한다
+  - 공유 락 (Shared Lock): 여러 트랜잭션이 동시에 읽을 수 있음
+    - 데이터를 `Read Only`로 접근할 때 사용
+    - 동시에 여러 개를 허용할 수 있음
+  - 배타적 락 (Exclusive Lock): 한 트랜잭션만 쓰기 가능. 다른 트랜잭션은 접근 불가
+    - 데이터를 `Write`할 때 사용
+    - 다른 어떤 락과도 동시에 허용될 수 없음
+  
+  `락이 이미 사용 중`이라면 대기하거나 트랜잭션을 중단 후 재시도하며 `락이 해제`되면 대기 중인 트랜잭션 중 하나에 락을 넘긴다
+<br/><br/>
+- Page Cache   
+  디스크(느림)와 메모리(빠름) 사이의 중간 저장 공간   
+  모든 변경 사항은 디스크에 바로 쓰지 않고 캐시에 기록된 다음 나중에 일괄적으로 반영됨
+  <br/><br/>
+- Log Manager   
+  데이터베이스가 장애를 겪어도 최근 작업 내용이 손실되지 않도록 함
+  - Redo: 시스템 재시작 시, 로그를 통해 **최근 작업을 다시 실행**해서 캐시 상태 복원
+  - Undo: 실패하거나 중단(abort)된 **트랜잭션의 작업을 되돌리기 위해** 사용   
+  
+  데이터는 먼저 페이지 캐시에 반영되고 동시에 로그에도 기록된다!
